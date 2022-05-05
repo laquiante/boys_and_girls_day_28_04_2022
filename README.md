@@ -5,7 +5,7 @@ We created together a script to search in a leaf-spine evpn-vxlan setup for a ma
 
 cumulus@oob-mgmt-server:~/ON-10/step-api-py$ ./testmac 44:38:39:00:00:11
 
-<SNIP>
+[SNIP]
   
 Boys & Girls day 28.04.2022, Hamburg Germany
 Supporting one or two spines as MVP implementation
@@ -26,5 +26,5 @@ RM arp cache        sees      fe80::4638:39ff:fe00:11 local        active   44:3
   
 BGP default vrf               *> [2]:[0]:[48]:[44:38:39:00:00:11]
   
-<SNIP>  
+[SNIP]  
   
