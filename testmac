@@ -1,0 +1,210 @@
+#! /usr/bin/python3
+#
+# 2022 CLQ & ALQ Hamburg, Germany
+# EVPN VXLAN Leaf Spine Topology verification for L2
+#
+# "boys and girls day 28.04.2022"
+#  Gymnasium (High-School) Grade 5-7
+#
+# export PATH="$HOME/ON-10/step-api-py:$PATH"
+# MVP supports 2 VX based spines
+#
+# ---------------------------------------------
+
+
+
+#       Imporing needed modules
+import sys, re, argparse, os.path, os
+
+try:
+    from paramiko import SSHClient, AutoAddPolicy
+except ImportError:
+    print ("Required Module(s) not available")
+    sys.exit()
+
+#       Constants
+CONFIG_FILE = '/home/cumulus/ON-10/step-api-py/config_file'
+HKEY = '/home/cumulus/.ssh/known_hosts'
+BENUTZER = 'cumulus'
+NODES = ['192.168.200.2','192.168.200.3','192.168.200.4','192.168.200.5']
+HOSTS = ['192.168.200.6','192.168.200.7','192.168.200.8','192.168.200.9']
+
+#       Functions
+def via_ssh(kommando,ziel):
+    client = SSHClient()
+    client.load_host_keys(HKEY)
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(AutoAddPolicy())
+    client.connect(ziel, username=BENUTZER)
+    stdin, stdout, stderr = client.exec_command(kommando)
+    ergebnis = stdout.read().decode("utf8")
+    stdin.close()
+    stdout.close()
+    stderr.close()
+    client.close()
+    return  ergebnis
+
+#--------------------------------------------------
+def test_erreichbarkeit(testpunkte):
+    for n in testpunkte:
+        antwort = os.popen(f"ping -c 2 {n}").read()
+        if "Received = 2" or "Received = 1":
+            print(f"{n} reachble via OOB")
+        else:
+            print(f"{n} not reachable via OOB")
+    print("\n")
+
+def test_config_file():
+    if os.path.isfile(CONFIG_FILE) == True:
+        print("Config File available")
+    else:
+        print("Config File missing")
+        sys.exit()
+
+def read_config_file():
+    auswahl_liste = []
+    auswahl = []
+
+    auswahl_schicht2 = open(CONFIG_FILE, 'r')
+    auswahl_schicht2.seek(0)
+    auswahl_liste = auswahl_schicht2.readlines()
+    auswahl_schicht2.close()
+    for n in auswahl_liste:
+        auswahl.append(n.strip())
+    return auswahl
+
+def test_auswahl(auswahl,eingabe):
+    print("Verifying supplied Adress")
+    for n in auswahl:
+        if n == eingabe:
+            print("The Adress "+eingabe+" is valid and will be used\n")
+
+def test_vx(switch_liste):
+    for n in switch_liste:
+        ergebnis = via_ssh('/usr/bin/platform-detect', n)
+        if ergebnis.strip() == 'cumulus,vx':
+            host_name = via_ssh('hostname',n).strip()
+            print(f'Device {host_name:7} {n:15} is based on VX')
+
+
+def suchen_mac(switch_liste, test_adresse):
+    print(f"Boys & Girls day 28.04.2022, Hamburg Germany")
+    print(f"Supporting one or two spines as MVP implementation")
+    print(f"\nStarting verification for : "+test_adresse+"\n")
+    feld5 = 'uses'
+    feld6 = 'sees'
+    feld7 = 'send/recv'
+
+    for n in switch_liste:
+        feld2 = via_ssh('hostname',n).strip()
+        print(f'Verifying switch {n:15}discoverd as {feld2}:')
+        ergebnis = via_ssh('/usr/sbin/bridge fdb', n).splitlines()
+        for  zeile in ergebnis:
+            if (re.findall(test_adresse,zeile)):
+                feld1 = 'FDB'
+                feld8 = 'RIB'
+                feld9 = 'FIB'
+#               Working with FBD, RIB and FIB (opt. NH Groups)
+                if (re.findall(r'(dev)',zeile)):
+                    suche = re.findall(r'(dev)\s(\w+)',zeile)
+                    print(f'{feld1:20}{feld5:10}: {test_adresse} via {suche[0][1]}')
+                    if (re.findall(r'(vlan)',zeile)):
+                        suche = re.findall(r'(vlan)\s(\w+)',zeile)
+                        print(f'{feld1:20}vlan : {suche[0][1]}')
+                    if (re.findall(r'(dst)',zeile)):
+                        suche = re.findall(r'(dst)\s(\w+.\w+.\w+.\w+)',zeile)
+                        print(f'{feld1:20}uses the tunnel destination of {suche[0][1]}')
+                        rib_cmd = "sudo vtysh -c 'show ip route "+suche[0][1]+"'"
+                        fib_cmd = "ip route show  "+suche[0][1]
+                        fib_cmd = "ip route show  "+suche[0][1]
+                        suche_rib = via_ssh(rib_cmd,n).splitlines()
+                        for eintrag in suche_rib:
+                            if (re.findall(r'\*',eintrag)):
+                                print(f'{feld8:30}{suche[0][1]} {eintrag}')
+                        suche_fib = via_ssh(fib_cmd,n).splitlines()
+                        for eintrag in suche_fib:
+                            print(f'{feld9:30}{eintrag}')
+                            if (re.findall(r'nhid',eintrag)):
+                                erste_nhid = re.findall(r'(nhid)\s(\w+)',eintrag)
+                                kernel = via_ssh("uname -r",n).strip()
+                                print(f'{feld9:30}Kernel {kernel} uses "next hop groups", discovering next layer')
+                                nhgroup_cmd = 'ip nexthop'
+                                suche_nhgroup = via_ssh(nhgroup_cmd,n).splitlines()
+                                for nh_zeile in suche_nhgroup:
+                                    if(re.findall(erste_nhid[0][1],nh_zeile)):
+                                        print(f'{feld9:35}{nh_zeile}')
+                                        suche_groups =  re.findall(r'(group)\s(\w+)/(\w+)',nh_zeile)
+                                        print(f'{feld9:40} 1.: nh group: {suche_groups[0][1]}')
+                                        cmd = 'ip nexthop list id '+suche_groups[0][1]
+                                        erste_nhgroup_aufloesung = via_ssh(cmd,n).splitlines()
+                                        print(f'{feld9:40}{erste_nhgroup_aufloesung}')
+                                        try:
+                                            print(f'{feld9:40} 2.: nh group: {suche_groups[0][2]}')
+                                            cmd = 'ip nexthop list id '+suche_groups[0][2]
+                                            zweite_nhgroup_aufloesung = via_ssh(cmd,n).splitlines()
+                                            print(f'{feld9:40}{zweite_nhgroup_aufloesung}')
+                                        except:
+                                            print("no second NH group discovered")
+
+
+
+        ergebnis_route_manager = via_ssh('sudo vtysh -c "show evpn mac vni all"', n).splitlines()
+        for i in ergebnis_route_manager:
+            if (re.findall(test_adresse, i)):
+                feld2 = via_ssh('hostname',n).strip()
+                feld3 = 'RM'
+                if (re.findall(r'(remote)',i)):
+                    suche = re.findall(r'(remote)\s+(\w+).(\w+).(\w+).(\w+)',i)
+                    print(f'{feld3:20}{feld6:10}: {test_adresse} via {suche[0][1]}.{suche[0][2]}.{suche[0][3]}.{su$
+
+        ergebnis_route_manager_cache = via_ssh('sudo vtysh -c "show evpn arp-cache vni all"',n).splitlines()
+        for ii in ergebnis_route_manager_cache:
+            if (re.findall(test_adresse,ii)):
+                feld10 = 'RM arp cache'
+                print(f'{feld10:20}{feld6:10}{ii}')
+
+        ergebnis_bgp = via_ssh('sudo vtysh -c"show bgp l2vpn evpn route"', n).splitlines()
+        merker = False
+        for j in ergebnis_bgp:
+            if (re.findall(test_adresse, j)):
+                feld2 = via_ssh('hostname',n).strip()
+                feld4 = 'BGP default vrf'
+                print(f'{feld4:30}{j}')
+                merker = True
+            if (re.findall(r'(0)\s(\w+)\s(\w+)\s(i)',j)and merker==True):
+                print(f'{feld4:30}{j}')
+                merker = False
+
+        merker = False
+        vni = "10"
+        print("! vni = 10 hard coded for MVP ")
+        cmd = "show bgp l2vpn evpn route vni"+vni
+        bgp_mac_vrf = via_ssh('sudo vtysh -c "show bgp l2vpn evpn route vni 10"',n).splitlines()
+        for v in bgp_mac_vrf:
+            if (re.findall(test_adresse,v)):
+                feld12 = 'BGP mac vrf'
+                print(f'{feld12:30}{v}')
+                merker = True
+            if (re.findall(r'(0)\s(\w+)\s(\w+)\s(i)',j)and merker==True):
+                print(f'{feld12:30}{v}')
+                merker = False
+        print('\n')
+
+def main(test_adresse):
+    test_config_file()
+    test_auswahl(read_config_file(),test_adresse)
+    test_erreichbarkeit(NODES)
+    test_erreichbarkeit(HOSTS)
+    test_vx(NODES)
+
+    #  Die Voraussetzungen sind gegeben
+    suchen_mac(NODES, test_adresse)
+
+if __name__ == "__main__":
+    pretty.install()
+    # Parameter
+    parser = argparse.ArgumentParser()
+    parser.add_argument("l2_addr")
+    args = parser.parse_args()
+    main(args.l2_addr)
+
