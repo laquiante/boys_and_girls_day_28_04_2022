@@ -28,3 +28,32 @@ BGP default vrf               *> [2]:[0]:[48]:[44:38:39:00:00:11]
   
 [SNIP]  
   
+Verifying switch 192.168.200.3  discoverd as leaf2:
+
+FDB                 uses      : 44:38:39:00:00:11 via vxlan48
+
+FDB                 vlan : 100
+
+FDB                 uses      : 44:38:39:00:00:11 via vxlan48
+
+FDB                 uses the tunnel destination of 172.16.100.1
+
+RIB                           172.16.100.1   * fe80::4638:39ff:fe00:7, via swp2, weight 1
+
+RIB                           172.16.100.1   * fe80::4638:39ff:fe00:9, via swp1, weight 1
+
+FIB                           172.16.100.1 nhid 57 proto bgp metric 20
+
+FIB                           Kernel 4.19.0-cl-1-amd64 uses "next hop groups", discovering next layer
+
+FIB                                id 57 group 46/51 proto zebra
+
+FIB                                      1.: nh group: 46
+
+FIB                                     ['id 46 via fe80::4638:39ff:fe00:7 dev swp2 scope link proto zebra ']
+
+FIB                                      2.: nh group: 51
+
+FIB                                     ['id 51 via fe80::4638:39ff:fe00:9 dev swp1 scope link proto zebra ']
+
+[SNIP]
